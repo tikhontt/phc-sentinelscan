@@ -3,6 +3,7 @@ import json
 import os
 from scanners.nmap_wrapper import run_nmap_scan
 from scanners.web_wrapper import check_headers
+from scanners.ssl_checker import check_ssl
 
 def save_markdown_report(data, folder):
     """Генерирует наглядный отчет в формате Markdown"""
@@ -26,6 +27,10 @@ def save_markdown_report(data, folder):
                 
                 for s in host['services']:
                     headers = s.get('security_headers', {})
+                    if 'ssl_info' in s and "error" not in s['ssl_info']:
+                        ssl = s['ssl_info']
+                        ssl_str = f"📅 Срок: {ssl['days_left']} дн."
+                        status_str += f"<br>🔒 {ssl_str}"
                     if isinstance(headers, dict) and "error" not in headers:
                         h_list = []
                         for k, v in headers.items():
@@ -60,9 +65,15 @@ if __name__ == "__main__":
 
     for host in results:
         for service in host['services']:
+            # Проверяем заголовки (HTTP)
             if service['port'] in [80, 443]:
-                print(f"[*] Проверка безопасности для {host['ip']}:{service['port']}...")
+                print(f"[*] Проверка HTTP-заголовков для {host['ip']}:{service['port']}...")
                 service['security_headers'] = check_headers(host['ip'], service['port'])
+            
+            # Проверяем SSL (HTTPS)
+            if service['port'] == 443:
+                print(f"[*] Запуск SSL/TLS аудита для {host['ip']}:443...")
+                service['ssl_info'] = check_ssl(host['ip'], service['port'])
 
     json_path = os.path.join(output_dir, "last_scan.json")
     with open(json_path, "w", encoding="utf-8") as f:
